@@ -137,9 +137,9 @@ public:
     BTree(char *fname, int cache_size);
     void insert(DATA *d);                // inserts new data into tree
    	bool remove(DATA *d);
-	bool search(bitmask_t key, VECTYPE **pdata);
+	bool search(bitmask_t key, DATA &pdata);
 	BTNode *search_entry(BTNode *btn, bitmask_t key);
-	bool search_data(BTNode *btn, bitmask_t key, VECTYPE **pdata);
+	bool search_data(BTNode *btn, bitmask_t key, DATA &pdata);
 
     
 	float RealToDual(float value,DIMTYPE curtype);

@@ -1,6 +1,6 @@
 #include "RTreeIndex.h"
 
-
+// M-- modify the read of point
 void RTreeIndex::CreateRTree()
 {
 	diskfile = StorageManager::createNewDiskStorageManager(treeFile, rtreePageSize);		//4k size page
@@ -20,7 +20,9 @@ void RTreeIndex::CreateRTree()
 			int id;char c;
 			double coor[2];
 			istringstream iss(line);
-			iss>> id >>c>>coor[0]>>c>>coor[1];
+			// M--
+			//iss>> id >>c>>coor[0]>>c>>coor[1];
+			iss >> id >> coor[0] >> coor[1];
 			Point p = Point(coor, 2);			
 			tree->insertData(0, 0, p, count);
 			count++;
@@ -31,14 +33,7 @@ void RTreeIndex::CreateRTree()
 
 void RTreeIndex::ReadIndex()
 {
-	//diskfile = StorageManager::loadDiskStorageManager(treeFile);
 	diskfile = StorageManager::loadDiskStorageManager(treeFile);
 	file = StorageManager::createNewRandomEvictionsBuffer(*diskfile, cacheblock, false);
 	tree = RTree::loadRTree(*file, 1);
-
-	IStatistics *out;
-	tree->getStatistics(&out);
-cout << out->getNumberOfData() << endl;
-cout << out->getNumberOfNodes() << endl;
-
 }

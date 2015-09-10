@@ -4,6 +4,7 @@
  *	Btree page size is set to 4k... can be change in the function buildBtree()
  */
 
+// handle, need to modify the structure of this inverted file in this section
 #ifndef _IBRTREE_
 #define _IBRTREE_
 
@@ -15,7 +16,6 @@
 #include <iostream>
 #include <direct.h>
 #include <sstream>
-//#include <utility>
 #include "Tool.h"
 #include "RTreeIndex.h"
 #include "WriteNodeStrategy.h"
@@ -35,8 +35,21 @@ extern string indexnodeFile;
 extern string subdocFolder;
 extern string invertedFolder;
 extern string btreeFolder;
+extern string objwetFile;
 
 extern int numOfEntry;
+
+
+struct tagObj{
+	int objID;
+	int tagID;
+};
+
+
+struct invertStru {
+	int attrW[ATTRW];
+	vector<tagObj> *objList ;
+};
 
 class IBRTree
 {
@@ -50,12 +63,17 @@ private:
 	RTreeIndex *rtree;
 
 	void buildBtree(int nodeID);
-
+	// split the textfile into subdoc according to leafnode id point belongs
 	void SplitDoc();	
+	// create the inverted file for leafnode from leaves and N2SG
 	void CreateLeafInverted();
+	// create the inverted file for index node with indexNodes
 	void CreateNonLeafInverted();
+	// read leaf node information to leaves and N2SG
 	int ReadLeafNodes();
+	// read the information of nonleafnode to indexNodes
 	void ReadIndexNodes();
+	// bulid the btree for each node of rtree
 	void BuildBTIndex();
 
 public:
@@ -85,11 +103,12 @@ public:
 	}	
 	
 	void BuildIBRTree();
-
+	// read disk file and tree 
 	void ReadTree()
 	{
 		rtree->ReadIndex();
 	}
+	// only return the tree 
 	ISpatialIndex* GetTree()
 	{
 		return rtree->getTree();

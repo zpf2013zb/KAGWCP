@@ -744,7 +744,7 @@ BTNode *BTree::search_entry(BTNode *btn, bitmask_t key){
 	
 }
 
-bool BTree::search_data(BTNode *btn, bitmask_t key, VECTYPE **pdata){
+bool BTree::search_data(BTNode *btn, bitmask_t key, DATA &pdata){
 	//??????????????ΪʲônumOfentry Ϊ0��
 	int numOfentry = btn->num_entries;
 	BTDataNode *dnode = (BTDataNode *)btn;
@@ -764,11 +764,13 @@ bool BTree::search_data(BTNode *btn, bitmask_t key, VECTYPE **pdata){
 			mid = (start + end) /2;
 		}
 	}
-	memcpy(*pdata, dnode->entries[mid].data, DIMENSION * sizeof(VECTYPE));
+// 
+	pdata = dnode->entries[mid];
+	//memcpy(*pdata, dnode->entries[mid].data, DIMENSION * sizeof(VECTYPE));
 	return true;
 }
 
-bool BTree::search(bitmask_t key, VECTYPE **pdata){
+bool BTree::search(bitmask_t key, DATA &pdata){
 	bool flag = true;
 	load_root();
 	

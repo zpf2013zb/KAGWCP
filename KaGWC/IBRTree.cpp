@@ -1,6 +1,7 @@
 #include "IBRTree.h"
-#include <utility>
 
+// read the leaf nodes point to N2SG <point id, leafnodeID>
+// leaves <leafID, points>
 int IBRTree::ReadLeafNodes()
 {
 	int total = 0;
@@ -44,11 +45,11 @@ int IBRTree::ReadLeafNodes()
 	return total;
 }
 
-
+// split the doc file according to the leafnodes information
 void IBRTree::SplitDoc()
 {
 	ifstream textF(textFile.c_str());
-	map<int, ofstream *> sdhandlers;
+	map<int, ofstream *> sdhandlers; // <leafnodeID, file>
 	
 	string line;
 	int count = 0;
@@ -77,7 +78,6 @@ void IBRTree::SplitDoc()
 		}					
 		else
 			op = si->second;
-
 		(*op)<<line<<endl;
 		count++;
 	}
@@ -90,21 +90,24 @@ void IBRTree::SplitDoc()
 	}
 	textF.close();
 }
-
+// leaves <leafID, points> to <kwd, point index>
+// --M-- modify in this part to add the summary information for kwd
+// --M-- storage the weight inf of object to objweight
 void IBRTree::CreateLeafInverted()
 {
+	// output the objweight inf to owFile
+	ofstream owFile(objwetFile.c_str());
 	map<int, vector<int> *>::iterator iter = leaves.begin();
+
 	for(;iter != leaves.end(); ++iter)
 	{
 		int leafID = iter->first;
-		vector<int> *p = iter->second;
-		
-		map<int, vector<int> *> inverted;
-		//------------------------------------------------------------------------
-		//vector<vector<int> *> objectTexts;	// remove duplicated words!! one word may occur multiple times at a location
-		vector<set<int> *> objectTexts;
-		//------------------------------------------------------------------------
+		vector<int> *p = iter->second;		
+		map<int, invertStru> inverted;
 
+		vector<set<int> *> objectTexts; // record the kwd of obj
+		vector<vector<int> *> objectTags; // tags corresponding to kwds
+		
 		string leafDoc = subdocFolder + MyTool::IntToString(leafID);
 		ifstream docF(leafDoc.c_str());
 		string line;
@@ -114,62 +117,108 @@ void IBRTree::CreateLeafInverted()
 			if(line == "")
 				continue;
 			int oid, wid; char c;
+			// --M-- read new added inf, coor and tags
+			int tag, totalweight = 0;
+			double coor[2];
 			istringstream iss(line);
-			iss>>oid;
+			// --M-- read the unrelevant coordinates inf
+			iss >> oid >> coor[0] >> coor[1];
+			//iss>>oid;
 			set<int> *p = new set<int>();
-			while(iss>>c>>wid)
-			{
+			vector<int > *objtag = new vector<int>();
+			while(iss>>c>>wid>>tag)
+			{			
 				p->insert(wid);
+				objtag->push_back(tag);
+				totalweight += tag;
 			}
 			objectTexts.push_back(p);
+			objectTags.push_back(objtag);
+			// --M-- output the weight inf
+			owFile << oid << ","<<totalweight<<endl;
 		}
 		docF.close();
 
 		//------------------------------------------------------------------------
 		vector<int> temp(*p);
 		sort(temp.begin(), temp.end());				
-			//Nodes id read from Rtree is not ordered, but in subdoc they are ordered!													
+		// Nodes id read from Rtree is not ordered, but in subdoc they are ordered!													
 		map<int, int> mapping;
 		for(unsigned int i=0;i<temp.size(); i++)
 		{
 			mapping[temp[i]] = i;
 		}		
 		//------------------------------------------------------------------------
-
+// note if there wrong conrresponding relationship
 		for(unsigned int i=0;i<p->size();i++)	//for each object in this leaf node
 		{
 			int nid = (*p)[i];
 			int idx = mapping[nid];				//get this object's position in the ordered list
 			set<int> *words = objectTexts[idx];
+			vector<int> *tags = objectTags[idx];
+			if (words->size() != tags->size()) {
+cout << "There is problem in handle inverted file" << endl;
+			}
 			set<int>::iterator wi = words->begin();
-			for(; wi!=words->end();++wi)		//for each word contained in this object
+			vector<int>::iterator tgi = tags->begin();
+			// compute the weight value of this obj
+			int objWeight = 0;
+			for (; tgi != tags->end(); tgi++) {
+				//if (*tgi < weight) weight = *tgi;
+				objWeight += *tgi;
+			}
+			
+			for(tgi = tags->begin(); wi!=words->end();++wi,++tgi)		//for each word contained in this object
 			{
 				int wordID = *wi;
-				map<int, vector<int> *>::iterator ti = inverted.find(wordID);
-				if(ti != inverted.end())
-				//------------------------------------------------------------------------
-					inverted[wordID]->push_back(i);			//push_back the original position in the unordered list in R-tree!!
-				//------------------------------------------------------------------------
-				else
+				int tagID = *tgi;
+				map<int, invertStru>::iterator ti = inverted.find(wordID);
+				if (ti != inverted.end()) { // exists
+					tagObj tobj;
+					tobj.objID = i;
+					tobj.tagID = tagID;
+
+					if (objWeight < inverted[wordID].attrW[0]) {
+						inverted[wordID].attrW[0] = objWeight;
+					}
+					inverted[wordID].attrW[tagID]++;
+					inverted[wordID].objList->push_back(tobj);
+				}
+				else // do not exist
 				{
-					vector<int> *p = new vector<int>();
-					p->push_back(i);
-					inverted[wordID] = p;
+					invertStru is;
+					memset(is.attrW, 0, sizeof(int)*ATTRW);
+					is.attrW[0] = objWeight;
+					is.attrW[tagID]++;
+
+					vector<tagObj> *p = new vector<tagObj>();
+					tagObj tobj;
+					tobj.objID = i;
+					tobj.tagID = tagID;
+
+					p->push_back(tobj);
+					is.objList = p;
+					inverted[wordID] = is;
 				}
 			}
 		}
 
 		ofstream outF( (invertedFolder + MyTool::IntToString(leafID)).c_str());		
-				//write the object's index, instead of its ID£¡
-		map<int, vector<int> *>::iterator fi;		
+		//write the object's index, instead of its ID£¡
+		map<int, invertStru>::iterator fi;
 		for(fi = inverted.begin(); fi != inverted.end(); ++fi)
 		{
 			outF<<fi->first<<"\t";
-			
-			vector<int> *p = fi->second;
-			vector<int>::iterator iter = p->begin();
-			for(; iter != p->end() ; ++iter)
-				outF<<*iter<<",";
+			invertStru ivs = fi->second;
+			// output the attrw inf
+			for (int l = 0; l < ATTRW; l++) {
+				outF << ivs.attrW[l] <<" ";
+			}
+			vector<tagObj>::iterator iter = ivs.objList->begin();
+
+			for (; iter != ivs.objList->end(); ++iter) {
+				outF << "," << iter->objID << " "<< iter->tagID;
+			}		
 			outF<<endl;
 		}
 		outF.close();
@@ -177,12 +226,17 @@ void IBRTree::CreateLeafInverted()
 		vector<set<int> *>::iterator iter1;
 		for(iter1 = objectTexts.begin(); iter1 != objectTexts.end(); ++iter1)
 			delete *iter1;
-		map<int, vector<int> *>::iterator iter2;
-		for(iter2 = inverted.begin(); iter2 != inverted.end(); ++iter2)
-			delete iter2->second;			
-	}
-}
+		vector<vector<int> *>::iterator iter2;
+		for (iter2 = objectTags.begin(); iter2 != objectTags.end(); ++iter2)
+			delete *iter2;
 
+		map<int, invertStru>::iterator iter3;
+		for(iter3 = inverted.begin(); iter3 != inverted.end(); ++iter3)
+			delete iter3->second.objList;			
+	}
+	owFile.close();
+}
+// indexNodes <indexID, childIDs>
 void IBRTree::ReadIndexNodes()
 {
 	ifstream inodeF(indexnodeFile.c_str());
@@ -200,45 +254,72 @@ void IBRTree::ReadIndexNodes()
 		{
 			p->push_back(nodes);
 		}
-		//indexNodes.push_back(make_pair<int, vector<int> *>(nid, p));
 		indexNodes.push_back(make_pair(nid, p));
 	}
 
 	inodeF.close();
 }
-
+// from indexNodes<tid,ctid> to <kwd, tnodeID>
+// --------------------M-- modify in this part to add the summary information for kwd
 void IBRTree::CreateNonLeafInverted()
 {
 	for(int idx = indexNodes.size() - 1; idx >= 0; idx--)		//for each non-leaf node. from bottom to up
 	{
-		map<int, vector<int> *> inverted;
-
 		int indexID = indexNodes[idx].first;		
+		int count = 0;
 
 		vector<int> *p = indexNodes[idx].second;
 		vector<int>::iterator iter = p->begin();
-		int count = 0;
-		for(; iter != p->end(); ++iter)							//for each its child nodes
+		map<int, invertStru> inverted;
+
+		for(; iter != p->end(); ++iter)	//for each its child nodes
 		{
 			int id = *iter;
 			ifstream listF( (invertedFolder + MyTool::IntToString(id)).c_str());
 			string line;
 			while(getline(listF, line))
 			{
-				int wordID;
+				int wordID, sumInf[ATTRW];
+				char c;
 				istringstream iss(line);
-				iss>>wordID;
+				iss >> wordID;
+				// compute the lable of this node 
+				for (int l = 0; l < ATTRW; l++) {
+					iss >> sumInf[l];
+				}			
 
-				map<int, vector<int> *>::iterator iter = inverted.find(wordID);
-				if(iter != inverted.end())
+				map<int, invertStru>::iterator iter = inverted.find(wordID);
+				if(iter != inverted.end()) // this kwd exits
 				{
-					iter->second->push_back(count);
+					if (sumInf[0] < iter->second.attrW[0]) {
+						iter->second.attrW[0] = sumInf[0];
+					}
+					for (int l = 1; l < ATTRW; l++) {
+						iter->second.attrW[l] += sumInf[l];
+					}
+
+					tagObj tob;
+					tob.objID = count;
+					tob.tagID = sumInf[0];
+					iter->second.objList->push_back(tob);
 				}
-				else
+				else // do not exists
 				{
-					vector<int> *p = new vector<int>();
-					p->push_back(count);
-					inverted[wordID] = p;
+					invertStru is;
+					memset(is.attrW, 0, sizeof(int)*ATTRW);	
+
+					is.attrW[0] = sumInf[0];				
+					for (int l = 1; l < ATTRW; l++) {
+						is.attrW[l] += sumInf[l];
+					}
+
+					tagObj tob;
+					tob.objID = count;
+					tob.tagID = sumInf[0];
+					
+					vector<tagObj> *p = new vector<tagObj>();
+					p->push_back(tob);
+					inverted[wordID].objList = p;
 				}								
 			}
 			listF.close();			
@@ -246,22 +327,26 @@ void IBRTree::CreateNonLeafInverted()
 		}
 
 		ofstream outF( (invertedFolder + MyTool::IntToString(indexID)).c_str());
-		map<int, vector<int> *>::iterator fi;		
-		for(fi = inverted.begin(); fi != inverted.end(); ++fi)
+		map<int, invertStru>::iterator fi;
+		for (fi = inverted.begin(); fi != inverted.end(); ++fi)
 		{
-			outF<<fi->first<<"\t";
-			
-			vector<int> *p = fi->second;
-			vector<int>::iterator iter = p->begin();
-			for(; iter != p->end() ; ++iter)
-				outF<<*iter<<",";
-			outF<<endl;
+			outF << fi->first << "\t";
+			invertStru ivs = fi->second;
+			// output the attrw inf
+			for (int l = 0; l < ATTRW; l++) {
+				outF << ivs.attrW[l] << " ";
+			}
+			vector<tagObj>::iterator iter = ivs.objList->begin();
+			for (; iter != ivs.objList->end(); ++iter) {
+				outF << "," << iter->objID << " "<< iter->tagID;
+			}
+			outF << endl;
 		}
 		outF.close();
 
-		map<int, vector<int> *>::iterator iter2;
-		for(iter2 = inverted.begin(); iter2 != inverted.end(); ++iter2)
-			delete iter2->second;	
+		map<int, invertStru>::iterator iter3;
+		for (iter3 = inverted.begin(); iter3 != inverted.end(); ++iter3)
+			delete iter3->second.objList;
 	}
 }
 
@@ -280,19 +365,29 @@ void IBRTree::buildBtree(int nodeID)
 	{				
 		int wordID; char c;
 		istringstream iss(line);
-		iss>>wordID;
 		DATA *p = new DATA();
+		// read key
+		iss >> wordID;
 		p->key = wordID;
-		
-		int indexID;
-		while(iss>>indexID>>c)
+		// read the suminf
+		for (int l = 0; l < ATTRW; l++) {
+			iss >> p->attrw[l];
+		}
+		// read objList inf
+		int indexID; // tree node num
+		int tagID;
+		int loop = 0;
+		while(iss>>c>>indexID>>tagID)
 		{
-			int bytePos = indexID/8;
+			int bytePos = indexID / 8;
 			int bitPos = indexID % 8;
 			unsigned char mask = 1 << bitPos;
+			unsigned char tagmask = 1 << tagID;
 			p->data[bytePos] = p->data[bytePos] | mask;
+			p->tag[loop] = p->tag[loop] | tagmask;
+			loop++;
 		}
-		bt->insert(p);
+		bt->insert(p);  
 		delete p;
 	}
 	leafIFL.close();
@@ -332,7 +427,7 @@ void IBRTree::BuildIBRTree()
 		cout<<"Creating R-tree"<<endl;
 		rtree->CreateRTree();
 	}
-
+	// write the leaf and index node rtree information to file respectively
 	if(!MyTool::FileExist(leafnodeFile))
 	{
 		cout<<"Writing R-tree structure to file"<<endl;
@@ -354,6 +449,7 @@ void IBRTree::BuildIBRTree()
 	{
 		cout<<"Creating inverted file for R-tree nodes"<<endl;
 		_mkdir(invertedFolder.c_str());
+		// note that in the inverted file, only the index of object or tnode are stored instead of the id
 		CreateLeafInverted();
 		CreateNonLeafInverted();		
 	}	

@@ -42,20 +42,14 @@
     <ClInclude Include="Problem1.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="Problem2.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="RTreeIndex.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="SearchIBRTree.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Tool.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="WriteNodeStrategy.h">
       <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Tool.h">
+      <Filter>源文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -75,9 +69,6 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="InvertedFileList.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Problem2Exact1.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="RTreeIndex.cpp">

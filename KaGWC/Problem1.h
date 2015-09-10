@@ -17,6 +17,7 @@ extern string locFile;
 extern string invertedFile;
 extern string subdocFolder;
 extern string btreeFolder;
+extern map<int, int> objWeight;
 
 void GenerateSubSets(vector<int> &intersect, set<KEYTYPE> &res)
 {	
@@ -36,26 +37,26 @@ void GenerateSubSets(vector<int> &intersect, set<KEYTYPE> &res)
 	}
 }	
 
-
-
 bool compareNode(RTreeNode *a, RTreeNode *b)
 {
-	return a->minValue > b->minValue;
+	return a->maxCtri < b->maxCtri;
 }
 
 ///* approximation algorithm
+// --M---------------------------modify the query parameters
 class Problem1Appr : public SpatialIndex::IQueryStrategy
 {
 private:	
 	vector<RTreeNode *> heapNode;	
 	Query *Q;
 	int nodeNum;
-	vector<int> keywords;
-	KEYTYPE keywordsBM;			//keywords bitmask
+	vector<int> keywords; // record the query keyword
+	KEYTYPE keywordsBM;	//keywords bitmask
 	set<int> group;
 	double Cost;
-	map<int, double> objectDist;
-	int loopt;
+	map<int, double> objectWetDist;
+	map<int, float> residualV; // used to repalce the keywordsBM
+	vector<int> remainKwds;
 public:
 
 	double ComputeCost()
@@ -63,7 +64,7 @@ public:
 		double res = 0.0;
 		set<int>::iterator si;
 		for(si = group.begin(); si != group.end(); ++si)
-			res += objectDist[*si];
+			res += objectWetDist[*si];
 		return res;
 	}
 
@@ -76,19 +77,16 @@ public:
 		out<<endl;
 		return out;
 	}
-	
+	// initiate the query parameters
 	Problem1Appr(Query *Q, int nodeNum)
 	{
-loopt = 0;
 		this->Q = Q;
 		this->nodeNum = nodeNum;		
 
-		istringstream iss(Q->text);
-		int wid; char c;
-		while(iss>>wid)
-		{
-			keywords.push_back(wid);
-			iss>>c;
+		keywords.assign(Q->kwd.begin(), Q->kwd.end());
+		remainKwds.assign(Q->kwd.begin(), Q->kwd.end());
+		for (int i = 0; i < keywords.size(); i++) {
+			residualV[keywords[i]] = Q->thre;
 		}
 
 		keywordsBM = pow(2.0, (int)keywords.size())-1;
@@ -103,17 +101,25 @@ loopt = 0;
 			heapNode.pop_back();
 			delete p;
 		}
-
 	}
+
+	void intersect(vector<int> remain, vector<int> *curNode, vector<int> &intsectR) {
+		set_intersection(remain.begin(), remain.end(), curNode->begin(), curNode->end(), intsectR.begin());
+	}
+
+	int intersectNum(vector<int> remain, vector<int> curNode) {
+		vector<int> intsectR;
+		set_intersection(remain.begin(), remain.end(), curNode.begin(), curNode.end(), intsectR.begin());
+		return intsectR.size();
+	}
+
 
 	void getNextEntry(const IEntry& entry, id_type& nextEntry, bool& hasNext)
 	{	
 		const INode* n = dynamic_cast<const INode*>(&entry);
-cout << loopt << endl;
-loopt++;
+		map<int, vector<int>*> objectTexts;	// the text description of an object
+		map<int, vector<int>*> objectTags;	// record the tag inf of kwd
 
-int lev = n->getLevel();
-int childn = n->getChildrenCount();
 		if (n != 0)
 		{
 			int pid = n->getIdentifier();
@@ -122,51 +128,84 @@ int childn = n->getChildrenCount();
 			memcpy(btfname, btFile.c_str(), btFile.size());		
 			btfname[btFile.size()] = '\0';
 			BTree *bt = new BTree(btfname, 0);	
-int nn = bt->num_of_inodes;
-int nd = bt->num_of_data;
-int ndn =  bt->num_of_dnodes;
-			map<int, vector<int>*> objectTexts;		//the text description of an object
-			set<int> indexID;						//the id of child nodes which contains query keywords				
-			map<int, vector<int>*>::iterator iterMap;
+
+			set<int> indexID; //the id of child nodes which contains query keywords				
+			map<int, vector<int>*>::iterator iterText;
+			map<int, vector<int>*>::iterator iterTag;
+			// construct the objectTexts:<objID, kwd list>, indexID record all the relevant object id in this btreenode
+			map<int, int> kwdTweight;
 			for(unsigned int k=0;k<keywords.size();k++)		
-								// Find all the object that contain the query keywords, and created an inverted list								
-								// in this list, the position of an object is used, instead of the object's ID
+			// Find all the object that contain the query keywords, and created an inverted list								
+			// in this list, the position of an object is used, instead of the object's ID
 			{
 				int wordID = keywords[k];
-				unsigned char *data = new unsigned char[DIMENSION];
-				bool flag = bt->search(wordID, &data);
+				DATA *da= new DATA();
+				//unsigned char *data = new unsigned char[DIMENSION];
+				bool flag = bt->search(wordID, *da);
+				int wt = da->attrw[0];
+				kwdTweight[wordID] = wt;
 				if(flag)
 				{					
+					int loop = 0;
 					for(int i=0;i<DIMENSION;i++)
 					{
-						if(data[i] > 0)							
+						if(da->data[i] > 0)							
 						{
 							unsigned char mask = 1;
 							for(int j=0;j<8;j++)
 							{
-								if((data[i] & mask) > 0)
+								if((da->data[i] & mask) > 0)
 								{
-									int index = i*8+j;
+									int index = i*8+j; // less than 40 for hotel
 									indexID.insert(index);
-									iterMap = objectTexts.find(index);
-									if(iterMap ==  objectTexts.end())
+									iterText = objectTexts.find(index);
+									iterTag = objectTags.find(index);
+									
+									if(iterText ==  objectTexts.end()) // do not exist
 									{
 										vector<int> *p = new vector<int>();
-										p->push_back(k);		//the index of the word in keywords, not the real word id!
+										//p->push_back(k); //the index of the word in keywords, not the real word id!
+										p->push_back(wordID);
 										objectTexts[index] = p;
+
+										vector<int> *tag = new vector<int>();
+										unsigned char c = 1;
+										for (int f = 1; f < 8; f++) {
+											c << 1;
+											if (c&da->tag[loop]) { //
+												tag->push_back(f);
+												break;
+											}
+											
+										}
+										objectTags[index] = tag;
 									}
 									else
 									{
-										vector<int> *p = iterMap->second;
-										p->push_back(k);
+										vector<int> *p = iterText->second;
+										//p->push_back(k);
+										p->push_back(wordID);
+
+										vector<int> *ptag = iterTag->second;
+										unsigned char c = 1;
+										int tagv;
+										for (int f = 1; f < 8; f++) {
+											c << 1;
+											if (c&da->tag[loop]) { //
+												tagv = f;
+												break;
+											}
+										}
+										ptag->push_back(tagv);
 									}
 								}
 								mask = mask << 1;
+								loop++;
 							}
 						}
 					}
 				}
-				delete data;
+				//delete data;
 			}
 			delete bt;
 			delete btfname;
@@ -184,39 +223,87 @@ int ndn =  bt->num_of_dnodes;
 				double dx = Q->x - pr->m_pHigh[0];
 				double dy = Q->y - pr->m_pHigh[1];											
 
-				KEYTYPE key = MyTool::ConvertToInt(objectTexts[cChild]);
+				KEYTYPE key = MyTool::ConvertToInt(objectTexts[cChild]); // transform the kwds to int bitmask
 				KEYTYPE interS = key & keywordsBM;
-				if( interS == 0)		//no uncovered keywords contained
+				vector<int> interSKWD;
+				intersect(remainKwds, objectTexts[cChild], interSKWD);
+
+				if( interSKWD.size() == 0)		//no uncovered keywords contained
 				{
 					delete pr;
 					continue;
 				}
 
-				double dist;
+				double wdist;
 				RTreeNode *rtp = new RTreeNode;
-				
+				rtp->intSKWD.clear();
+				rtp->intSKWD.assign(interSKWD.begin(), interSKWD.end());
+				// compute the maxCtri
 				if(n->isLeaf())
 				{
-					dist = sqrt(dx * dx + dy * dy);
-					objectDist[n->getChildIdentifier(cChild)] = dist;
+					wdist = sqrt(dx * dx + dy * dy)*objWeight[cid];
+					objectWetDist[cid] = wdist;
+					rtp->wDist = wdist;
+					float cov = 0.0;
+
+					map<int, vector<int>*>::iterator itg = objectTags.find(cChild);
+					vector<int> *pg = itg->second;
+					vector<int>::iterator itrg = pg->begin();
+
+					map<int, vector<int>*>::iterator itt = objectTexts.find(cChild);
+					vector<int> *pt = itt->second;
+					vector<int>::iterator itrt = pt->begin();
+					// compute the cov
+					for (; itrg!=pg->end(); itrg++, itrt++) {
+						int tag = *itrg;
+						int kwd = *itrt;
+						if (find(rtp->intSKWD.begin(), rtp->intSKWD.end(), kwd) == rtp->intSKWD.end()) { // not exist
+							continue;
+						}
+						float ctr = Q->prefVector[tag - 1] < residualV[kwd] ? Q->prefVector[tag - 1] : residualV[kwd];
+						rtp->kwdTCtr[kwd] = ctr;
+						cov = cov + ctr;
+					}
+					rtp->maxCtri = cov / wdist;
 					rtp->isNode = false;
 				}
 				if(n->isIndex())
 				{
 					double coor[2];
 					coor[0] = Q->x; coor[1] = Q->y;
-					Point pt(coor, 2);
+					Point pit(coor, 2);
 
-					dist = MyTool::ComputeMinPossible(pr, &pt);
+					wdist = MyTool::ComputeMinPossible(pr, &pit);
+					rtp->wDist = wdist;
+
+					float cov = 0;
+					map<int, vector<int>*>::iterator itg = objectTags.find(cChild);
+					vector<int> *pg = itg->second;
+					vector<int>::iterator itrg = pg->begin();
+
+					map<int, vector<int>*>::iterator itt = objectTexts.find(cChild);
+					vector<int> *pt = itt->second;
+					vector<int>::iterator itrt = pt->begin();
+					// compute the cov
+
+					for (; itrg != pg->end(); itrg++, itrt++) {
+						int tag = *itrg;
+						int kwd = *itrt;
+						if (find(rtp->intSKWD.begin(), rtp->intSKWD.end(), kwd) == rtp->intSKWD.end()) { // not exist
+							continue;
+						}
+						float wet = kwdTweight[kwd];
+						rtp->kwdTCtr[kwd] = wet;
+// modify this part for our algorithm
+						float maxCtr = Q->thre > 1 ? 1 : Q->thre;
+						cov = cov + maxCtr/wet;
+					}
+					rtp->maxCtri = cov;
 					rtp->pr = pr;
 					rtp->isNode = true;
 				}
 				
-				rtp->identifier = n->getChildIdentifier(cChild);
-				rtp->bitmap = interS;
-				int num = MyTool::getNumOf1(interS);
-				rtp->minValue = dist/num;
-
+				rtp->identifier = cid;
 				heapNode.push_back(rtp);
 				push_heap(heapNode.begin(), heapNode.end(), compareNode);
 			}
@@ -227,7 +314,12 @@ int ndn =  bt->num_of_dnodes;
 				vector<int> *p = oi->second;
 				delete p;
 			}
-			
+			map<int, vector<int>*>::iterator oi2 = objectTags.begin();
+			for (; oi2 != objectTags.end(); ++oi2)
+			{
+				vector<int> *p = oi2->second;
+				delete p;
+			}		
 		}
 
 		if (!heapNode.empty())		
@@ -247,14 +339,26 @@ int ndn =  bt->num_of_dnodes;
 					break;
 				}
 
-				double dist = p->minValue;
-				KEYTYPE key = p->bitmap;
-				group.insert(p->identifier);
-cout << p->identifier << endl;
+				double dist = p->maxCtri;
 				Cost += dist;
-				keywordsBM = keywordsBM - key;
+
+				group.insert(p->identifier);
+				map<int, float>::iterator iterRm = p->kwdTCtr.begin();
+				for (; iterRm != p->kwdTCtr.end(); iterRm++) {
+					int kwdID = iterRm->first;
+					float ctrbu = iterRm->second;
+					residualV[kwdID] = residualV[kwdID] - ctrbu;
+					// set the remainKwd 
+					if (residualV[kwdID] <= 0) {
+						residualV[kwdID] = 0;
+						vector<int> ::iterator it = find(remainKwds.begin(), remainKwds.end(), kwdID);
+						if (it != remainKwds.end()) {
+							remainKwds.erase(it);
+						}					
+					}
+				}				
 				
-				if(keywordsBM == 0)
+				if(remainKwds.size() == 0)
 				{
 					delete p;
 					hasNext = false;
@@ -267,12 +371,13 @@ cout << p->identifier << endl;
 				for(int i=0; i< length; i++)
 				{
 					RTreeNode *t = heapNode[i];
-					KEYTYPE tkey = t->bitmap;
-					if( (tkey & key) == 0)		//the node shares no keywords with the current object
-						continue;					
+					if (intersectNum(p->intSKWD, t->intSKWD) == 0)
+						continue;
 
-					KEYTYPE interS = tkey & keywordsBM;		//remove the words already covered
-					if( interS == 0)			//the node's all keywords are covered
+					vector<int> interS;
+					intersect(t->intSKWD, &remainKwds, interS);
+
+					if( interS.size() == 0)			//the node's all keywords are covered
 					{						
 						delete t;
 						heapNode[i] = heapNode[length-1];
@@ -281,28 +386,55 @@ cout << p->identifier << endl;
 						i--;	//process the new object exchanged here in next loop!
 						continue;
 					}
-
-					if(tkey != interS)
-					{
-						int pSize = MyTool::getNumOf1(tkey);
-						t->bitmap = interS;
-						int nSize = MyTool::getNumOf1(interS);
-						t->minValue = t->minValue * pSize / nSize;
+					// if the insert of the new object influence the contribution current node or object
+					if (t->isNode) {
+						t->intSKWD.clear();
+						t->intSKWD = interS;
+						float cov = 0;
+						map<int, float> ::iterator it = t->kwdTCtr.begin();
+						for (; it != t->kwdTCtr.end(); it++) {
+							int kwd = it->first;
+							float wet = it->second;
+							if (find(t->intSKWD.begin(), t->intSKWD.end(), kwd) == t->intSKWD.end()) {
+								t->kwdTCtr.erase(it);
+								continue;
+							}
+							float maxCov = residualV[kwd] > 1 ? 1 : residualV[kwd];
+							cov = cov + maxCov/wet;
+						}
+						t->maxCtri = cov;
 					}
-				}				
-				
+					else {
+						t->intSKWD.clear();
+						t->intSKWD = interS;
+						float cov = 0;
+						map<int, float> ::iterator it = t->kwdTCtr.begin();
+						for (; it != t->kwdTCtr.end(); it++) {
+							int kwd = it->first;
+							float ctr = it->second;
+							if (find(t->intSKWD.begin(), t->intSKWD.end(), kwd) == t->intSKWD.end()) {
+								t->kwdTCtr.erase(it);
+								continue;
+							}
+							if (ctr > residualV[kwd]) {
+								ctr = residualV[kwd];
+							}
+							cov = cov + ctr;
+						}
+						t->maxCtri = cov/t->wDist;
+					}				
+				}							
 				make_heap(heapNode.begin(), heapNode.end(), compareNode);				
 				delete p;
 			}		
 		}
-	
 		else 
 			hasNext = false;
 	}
 };//*/
 
-
-
+/*
+// for compare 2013-sigmod
 class Problem1Baseline
 {
 	Query *Q;
@@ -310,7 +442,7 @@ class Problem1Baseline
 	double* Cost;
 	set<KEYTYPE> **group;
 	unsigned int keywordsBM;
-	map<unsigned int, double> objectDist;
+	map<unsigned int, double> objectWetDist;
 
 public:
 
@@ -396,7 +528,7 @@ public:
 			if(Cost[i] >= 0)
 			{
 				int oid = *(group[i]->begin());
-				objectDist[oid] = Cost[i];
+				objectWetDist[oid] = Cost[i];
 			}
 		}
 
@@ -418,7 +550,7 @@ public:
 					s1 = p1->find(*s2);
 					if(s1 == p1->end())
 					{
-						d += objectDist[*s2];
+						d += objectWetDist[*s2];
 					}
 				}
 				if(d == Cost[j])		//two subsets are contributed by same objects, do nothing
@@ -507,9 +639,10 @@ public:
 		PostProcess();
 	}
 };
-
+*/
 
 /* the dynamic programming method */
+/*
 class Problem1IBRTree : public SpatialIndex::IQueryStrategy
 {
 private:	
@@ -598,7 +731,7 @@ public:
 			
 			map<int, vector<int>*> objectTexts;		//the text description of an object
 			set<int> indexID;						//the id of child nodes which contains query keywords				
-			map<int, vector<int>*>::iterator iterMap;
+			map<int, vector<int>*>::iterator iterText;
 			for(unsigned int k=0;k<keywords.size();k++)
 			{
 				int wordID = keywords[k];
@@ -619,8 +752,8 @@ public:
 								{
 									int index = i*8+j;
 									indexID.insert(index);
-									iterMap = objectTexts.find(index);
-									if(iterMap ==  objectTexts.end())
+									iterText = objectTexts.find(index);
+									if(iterText ==  objectTexts.end())
 									{
 										vector<int> *p = new vector<int>();		
 										p->push_back(k);		//the index of the word in keywords, not the real word id!
@@ -628,7 +761,7 @@ public:
 									}
 									else
 									{
-										vector<int> *p = iterMap->second;
+										vector<int> *p = iterText->second;
 										p->push_back(k);
 									}
 								}
@@ -682,7 +815,7 @@ public:
 				}
 				
 				rtp->identifier = n->getChildIdentifier(cChild);
-				rtp->minValue = dist;
+				rtp->maxCtri = dist;
 				rtp->bitmap = keyValue;
 				queueNode.push(rtp);
 			}	
@@ -718,10 +851,10 @@ public:
 					}
 				}
 
-				double dist = p->minValue;
+				double dist = p->maxCtri;
 
 				set<KEYTYPE>::iterator si = valuedSet.begin();	
-							// utilize dist to move some subsets to marked set. because the lowest cost is known now
+				// utilize dist to move some subsets to marked set. because the lowest cost is known now
 				set<KEYTYPE> moved;
 				for(;si != valuedSet.end(); ++si)
 				{
@@ -817,5 +950,5 @@ public:
 	}
 	
 };
-
+*/
 #endif

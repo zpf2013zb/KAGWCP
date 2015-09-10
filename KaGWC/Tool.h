@@ -1,6 +1,6 @@
 #ifndef _TOOLS_H_
 #define _TOOLS_H_
-
+// handle --define the basic information of rtree node and the kwd bits transform with int, note the maximum number of kwd!!!
 #include <map>
 #include <cmath>
 #include <vector>
@@ -9,6 +9,7 @@
 using namespace std;
 using namespace SpatialIndex;
 
+#define ATTR 5
 typedef unsigned int KEYTYPE; //if more keywords, should use long or long long
 
 typedef union{
@@ -18,11 +19,23 @@ typedef union{
 	};
 	long long key;
 } KeyID;
-
+// --------------------M--add keyword label--
 class Query
 {
 public:
-	Query() {x=0.0; y=0.0;text = "";}
+	Query(string line) {
+		memset(prefVector, 0.0, sizeof(float)*ATTR);
+		text = line;
+		istringstream iss(line);
+		iss >> x >> y;
+		for (int i = 0; i < ATTR; i++) {
+			iss >> prefVector[i];
+		}
+		int kwdInt;
+		while (iss >> kwdInt) {
+			kwd.push_back(kwdInt);
+		}
+	}
 	
 	Query(string text, double x , double y)
 	{
@@ -30,11 +43,16 @@ public:
 		this->x = x;
 		this->y = y;
 	}
+
+
 	string text;
+	float thre;
+	float prefVector[ATTR];
+	vector<int> kwd;
 	double x, y;
 };
 
-
+// --M--add the histogram information of kwd and label
 class RTreeNode{
 public:
 	RTreeNode()
@@ -47,14 +65,17 @@ public:
 	}
 
 	   id_type identifier;
-	   double minValue;		//the minimum possible score of this node
+	   double maxCtri;		//the minimum possible score of this node
 	   Region * pr;			//mbr region
-	   KEYTYPE bitmap;		//keywords bitmap
+	   //KEYTYPE bitmap;		//keywords bitmap
+	   map<int, float> kwdTCtr; // record the contribution for this kwd 
+	   float wDist;
 	   bool isNode;
+	   vector<int> intSKWD;
        
        static bool CompareValueLess(const RTreeNode * a,const  RTreeNode * b)
        {
-		   return a->minValue > b->minValue;
+		   return a->maxCtri < b->maxCtri;
        }
 };
 

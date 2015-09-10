@@ -5,16 +5,16 @@
 #include <time.h>
 #include <iostream>
 #include <functional>
-
 #include "IBRTree.h"
-#include "SearchIBRTree.h"
+//#include "SearchIBRTree.h"
 #include "Problem1.h"
-#include "Problem2.h"
+//#include "Problem2.h"
 using namespace std;
 
 string basepath = "..\\dataHotel\\";
 
-string locFile = basepath + "loc";
+//string locFile = basepath + "loc";
+string locFile = basepath + "doc";
 string treeFile = basepath + "rtree";
 string textFile = basepath + "doc";
 string invertedFile = basepath + "invertedfile";
@@ -24,30 +24,61 @@ string leafnodeFile = basepath + "leafnodes";
 string indexnodeFile = basepath + "indexnodes";
 string subdocFolder = basepath + "subdoc\\";
 string invertedFolder = basepath + "inverted\\";
+string objwetFile = basepath + "objectweight";
 
 int numOfEntry = 40;		//For hotel data, the fanout of R-tree is 40. it must be consistent with NODENUM defined in data.h!
 double alpha = 0.5;
+map<int, int> objWeight;
+
+void readObjWet() {
+	ifstream owFile(objwetFile.c_str());
+	while (!owFile.eof())
+	{
+		string line;
+		getline(owFile, line);
+		if (line == "")
+			continue;
+		istringstream iss(line);
+		int objID, weight;
+		char c;
+		iss >> objID >> c >> weight;
+		objWeight[objID] = weight;
+	}
+	owFile.close();
+}
 
 int main()
 {
 	IBRTree irtree;
 	//irtree.BuildIBRTree();
-	//cout << 2 << endl;
 
-	irtree.ReadTree();
+	//--------------------Test Code Start-----------------
 	
+	irtree.ReadTree();
+	readObjWet();
+
 	IStatistics *out;
 	irtree.GetTree()->getStatistics(&out);
 	int nodeNum = out->getNumberOfData();
-	//cout << 1 << endl;
 
-	Query *Q = new Query("2,5,100,52", 44, -151);
-
+	//Query *Q = new Query("2,5,100,52", 44, -151);
+cout << 1 << endl;
+	Query *Q = new Query("835.500000 483.000000 0.340500 0.250000 0.250000 0.250000 0.083333 0.166667 43 99");
 	clock_t start, finish;
-	//cout << 2 << endl;
-
-	//the following code shows how to retrieve the top-k nearest neighbor that contains some query keywords	
+cout << 2 << endl;
+	//the following code shows how to use the algorithms for the TYPE1 query
+	start = clock();
+	Problem1Appr pb1a(Q, nodeNum);
+cout << 3 << endl;
+	irtree.GetTree()->queryStrategy(pb1a);
+cout << 4 << endl;
+	finish = clock();
+	cout << pb1a;
+	cout << endl << endl;
+	cout << (finish - start) / CLOCKS_PER_SEC << endl;
 	
+	//--------------------Test Code End-----------------
+	//the following code shows how to retrieve the top-k nearest neighbor that contains some query keywords	
 	/*
 	SearchIBRTree ss(Q, nodeNum, 10);
 	irtree.GetTree()->queryStrategy(ss);
@@ -62,14 +93,6 @@ int main()
 	*/
 	
 	
-	
-	//the following code shows how to use the algorithms for the TYPE1 query
-	start = clock();
-	Problem1Appr pb1a(Q, nodeNum);
-	irtree.GetTree()->queryStrategy(pb1a);
-	finish = clock();
-	//cout<<pb1a;	
-	cout<< (finish - start) / CLOCKS_PER_SEC<<endl;
 
 	/*
 	start = clock();
