@@ -1,0 +1,83 @@
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/svn/spatialindex/!svn/ver/158/spatialindex/trunk/include
+END
+MovingPoint.h
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/svn/spatialindex/!svn/ver/130/spatialindex/trunk/include/MovingPoint.h
+END
+Point.h
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/spatialindex/!svn/ver/154/spatialindex/trunk/include/Point.h
+END
+LineSegment.h
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/svn/spatialindex/!svn/ver/154/spatialindex/trunk/include/LineSegment.h
+END
+RTree.h
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/spatialindex/!svn/ver/130/spatialindex/trunk/include/RTree.h
+END
+TimeRegion.h
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/svn/spatialindex/!svn/ver/130/spatialindex/trunk/include/TimeRegion.h
+END
+Makefile.am
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/svn/spatialindex/!svn/ver/138/spatialindex/trunk/include/Makefile.am
+END
+MovingRegion.h
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/svn/spatialindex/!svn/ver/130/spatialindex/trunk/include/MovingRegion.h
+END
+Region.h
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/spatialindex/!svn/ver/154/spatialindex/trunk/include/Region.h
+END
+MVRTree.h
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/spatialindex/!svn/ver/130/spatialindex/trunk/include/MVRTree.h
+END
+SpatialIndex.h
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/svn/spatialindex/!svn/ver/154/spatialindex/trunk/include/SpatialIndex.h
+END
+TPRTree.h
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/spatialindex/!svn/ver/130/spatialindex/trunk/include/TPRTree.h
+END
+Version.h
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/spatialindex/!svn/ver/117/spatialindex/trunk/include/Version.h
+END
+TimePoint.h
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/svn/spatialindex/!svn/ver/130/spatialindex/trunk/include/TimePoint.h
+END
