@@ -6,7 +6,7 @@
 #include <map>
 #include <set>
 #include <vector>
-#include "Tool.h"
+#include "Tools.h"
 #include "data.h"
 #include "btree.h"
 
@@ -104,12 +104,14 @@ public:
 	}
 
 	void intersect(vector<int> remain, vector<int> *curNode, vector<int> &intsectR) {
-		set_intersection(remain.begin(), remain.end(), curNode->begin(), curNode->end(), intsectR.begin());
+		set_intersection(remain.begin(), remain.end(), curNode->begin(), curNode->end(), inserter(intsectR,intsectR.end()));
+int i = 0;
+i = intsectR.size();
 	}
 
 	int intersectNum(vector<int> remain, vector<int> curNode) {
 		vector<int> intsectR;
-		set_intersection(remain.begin(), remain.end(), curNode.begin(), curNode.end(), intsectR.begin());
+		set_intersection(remain.begin(), remain.end(), curNode.begin(), curNode.end(), inserter(intsectR, intsectR.end()));
 		return intsectR.size();
 	}
 
@@ -130,20 +132,22 @@ public:
 			BTree *bt = new BTree(btfname, 0);	
 
 			set<int> indexID; //the id of child nodes which contains query keywords				
-			map<int, vector<int>*>::iterator iterText;
-			map<int, vector<int>*>::iterator iterTag;
+			
 			// construct the objectTexts:<objID, kwd list>, indexID record all the relevant object id in this btreenode
 			map<int, int> kwdTweight;
+
 			for(unsigned int k=0;k<keywords.size();k++)		
 			// Find all the object that contain the query keywords, and created an inverted list								
 			// in this list, the position of an object is used, instead of the object's ID
 			{
 				int wordID = keywords[k];
 				DATA *da= new DATA();
+				//DATA test;
 				//unsigned char *data = new unsigned char[DIMENSION];
 				bool flag = bt->search(wordID, *da);
 				int wt = da->attrw[0];
 				kwdTweight[wordID] = wt;
+
 				if(flag)
 				{					
 					int loop = 0;
@@ -158,6 +162,8 @@ public:
 								{
 									int index = i*8+j; // less than 40 for hotel
 									indexID.insert(index);
+									map<int, vector<int>*>::iterator iterText;
+									map<int, vector<int>*>::iterator iterTag;
 									iterText = objectTexts.find(index);
 									iterTag = objectTags.find(index);
 									
@@ -167,17 +173,13 @@ public:
 										//p->push_back(k); //the index of the word in keywords, not the real word id!
 										p->push_back(wordID);
 										objectTexts[index] = p;
-
+										
 										vector<int> *tag = new vector<int>();
-										unsigned char c = 1;
-										for (int f = 1; f < 8; f++) {
-											c << 1;
-											if (c&da->tag[loop]) { //
-												tag->push_back(f);
-												break;
-											}
-											
-										}
+										unsigned char ch = da->tag[loop];
+										int tg = ch;
+										int tf = tg;
+										
+										tag->push_back(tg);
 										objectTags[index] = tag;
 									}
 									else
@@ -187,25 +189,21 @@ public:
 										p->push_back(wordID);
 
 										vector<int> *ptag = iterTag->second;
-										unsigned char c = 1;
-										int tagv;
-										for (int f = 1; f < 8; f++) {
-											c << 1;
-											if (c&da->tag[loop]) { //
-												tagv = f;
-												break;
-											}
-										}
-										ptag->push_back(tagv);
+										unsigned char ch = da->tag[loop];
+										int tg = ch;
+										int tf = tg;
+									
+										ptag->push_back(tg);
 									}
+									loop++;
 								}
 								mask = mask << 1;
-								loop++;
+								//loop++;
 							}
 						}
 					}
 				}
-				//delete data;
+				delete da;
 			}
 			delete bt;
 			delete btfname;
@@ -223,8 +221,8 @@ public:
 				double dx = Q->x - pr->m_pHigh[0];
 				double dy = Q->y - pr->m_pHigh[1];											
 
-				KEYTYPE key = MyTool::ConvertToInt(objectTexts[cChild]); // transform the kwds to int bitmask
-				KEYTYPE interS = key & keywordsBM;
+				//KEYTYPE key = MyTool::ConvertToInt(objectTexts[cChild]); // transform the kwds to int bitmask
+				//KEYTYPE interS = key & keywordsBM;
 				vector<int> interSKWD;
 				intersect(remainKwds, objectTexts[cChild], interSKWD);
 
@@ -242,8 +240,11 @@ public:
 				if(n->isLeaf())
 				{
 					wdist = sqrt(dx * dx + dy * dy)*objWeight[cid];
+int wt = objWeight[cid];
 					objectWetDist[cid] = wdist;
+					if (wdist < 0.0000000001) wdist = 0.0000000001;
 					rtp->wDist = wdist;
+
 					float cov = 0.0;
 
 					map<int, vector<int>*>::iterator itg = objectTags.find(cChild);
@@ -274,6 +275,7 @@ public:
 					Point pit(coor, 2);
 
 					wdist = MyTool::ComputeMinPossible(pr, &pit);
+					if (wdist < 0.0000000001) wdist = 0.0000000001;
 					rtp->wDist = wdist;
 
 					float cov = 0;
@@ -392,15 +394,16 @@ public:
 						t->intSKWD = interS;
 						float cov = 0;
 						map<int, float> ::iterator it = t->kwdTCtr.begin();
-						for (; it != t->kwdTCtr.end(); it++) {
+						for (; it != t->kwdTCtr.end(); ) {
 							int kwd = it->first;
 							float wet = it->second;
 							if (find(t->intSKWD.begin(), t->intSKWD.end(), kwd) == t->intSKWD.end()) {
-								t->kwdTCtr.erase(it);
+								it = t->kwdTCtr.erase(it);
 								continue;
 							}
 							float maxCov = residualV[kwd] > 1 ? 1 : residualV[kwd];
 							cov = cov + maxCov/wet;
+							it++;
 						}
 						t->maxCtri = cov;
 					}
@@ -409,16 +412,19 @@ public:
 						t->intSKWD = interS;
 						float cov = 0;
 						map<int, float> ::iterator it = t->kwdTCtr.begin();
-						for (; it != t->kwdTCtr.end(); it++) {
+						for (; it != t->kwdTCtr.end(); ) {
 							int kwd = it->first;
 							float ctr = it->second;
 							if (find(t->intSKWD.begin(), t->intSKWD.end(), kwd) == t->intSKWD.end()) {
-								t->kwdTCtr.erase(it);
+								it = t->kwdTCtr.erase(it);
 								continue;
 							}
 							if (ctr > residualV[kwd]) {
 								ctr = residualV[kwd];
+								t->kwdTCtr[kwd] = ctr;
+								
 							}
+							it++;
 							cov = cov + ctr;
 						}
 						t->maxCtri = cov/t->wDist;

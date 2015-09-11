@@ -52,11 +52,11 @@ int main()
 	IBRTree irtree;
 	//irtree.BuildIBRTree();
 
-	//--------------------Test Code Start-----------------
 	
+	//--------------------Test Code Start-----------------
+	///*
 	irtree.ReadTree();
 	readObjWet();
-
 	IStatistics *out;
 	irtree.GetTree()->getStatistics(&out);
 	int nodeNum = out->getNumberOfData();
@@ -76,7 +76,9 @@ cout << 4 << endl;
 	cout << pb1a;
 	cout << endl << endl;
 	cout << (finish - start) / CLOCKS_PER_SEC << endl;
-	
+	//*/
+
+
 	//--------------------Test Code End-----------------
 	//the following code shows how to retrieve the top-k nearest neighbor that contains some query keywords	
 	/*

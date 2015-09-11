@@ -8,7 +8,7 @@
 #include <map>
 #include <hash_map>
 #include <vector>
-#include "Tool.h"
+#include "Tools.h"
 using namespace std;
 
 extern string invertedFile;
